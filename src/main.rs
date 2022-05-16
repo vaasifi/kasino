@@ -1,7 +1,10 @@
-use bevy::prelude::*;
+//use bevy::prelude::*;
+mod blackjack;
 
 fn main() {
-    App::new()
+    blackjack::main();    
+    /*App::new()
         .add_plugins(DefaultPlugins)
         .run();
+    */
 }
