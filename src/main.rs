@@ -28,6 +28,8 @@ struct CardPiles {
     player_hand: Vec<PlayingCard>,
 }
 
+struct SFXPlayCard(Handle<AudioSource>);
+
 
 
 fn main() {
@@ -63,6 +65,11 @@ fn setup(
     };
     commands.insert_resource(cords);
 
+
+    // load audio
+    let play_card_sfx = asset_server.load("play_card01.ogg");
+    commands.insert_resource(SFXPlayCard(play_card_sfx));
+
     // Initialize camera
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 
@@ -84,8 +91,11 @@ fn card_spawner(
     keyboard: Res<Input<KeyCode>>,
     mut cords: ResMut<Coordinates>,
     mut card_piles: ResMut<CardPiles>,
+    audio: Res<Audio>,
+    sound: Res<SFXPlayCard>,
 ) {
     if keyboard.just_pressed(KeyCode::Z) {
+        audio.play(sound.0.clone());
         let card: PlayingCard = draw_card(&mut card_piles.deck);
         println!("Card asset index is {}", card_to_asset_index(&card));
         commands.spawn_bundle(SpriteSheetBundle {
