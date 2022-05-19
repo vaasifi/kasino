@@ -18,4 +18,5 @@ lto = "thin"
 
 [dependencies]
 bevy = "0.7"
+bevy_ecs = "0.7.0"
 rand = "0.8.5"

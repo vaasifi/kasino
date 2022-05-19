@@ -1,4 +1,7 @@
-use std::{fmt, io, cmp};
+use std::{fmt};
+use bevy::prelude::*;
+//use rand::{thread_rng, Rng};
+use crate::CardPiles;
 
 #[derive(Copy, Clone)]
 enum CardSuit {
@@ -21,22 +24,31 @@ impl fmt::Display for CardSuit {
 }
 
 #[derive(Copy, Clone)]
-struct PlayingCard {
+pub struct PlayingCard {
     suit: CardSuit,
     value: u8,
 }
 
-pub fn main() {
+pub fn main(
+	mut commands: Commands,
+) {
     let mut deck = init_deck();
-    let mut dealer_hand: Vec<PlayingCard> = Vec::new();
+    //let mut dealer_hand: Vec<PlayingCard> = Vec::new();
     let mut player_hand: Vec<PlayingCard> = Vec::new();
 
-    //Initial card draw
-    player_hand.push(draw_card(&mut deck));
-    dealer_hand.push(draw_card(&mut deck));
-    player_hand.push(draw_card(&mut deck));
+    let card_piles = CardPiles {
+        deck: deck,
+        player_hand: player_hand,
+    };
 
-    loop { //Player's Turn
+    commands.insert_resource(card_piles);
+
+    //Initial card draw
+    //player_hand.push(draw_card(&mut deck));
+    //dealer_hand.push(draw_card(&mut deck));
+    //player_hand.push(draw_card(&mut deck));
+
+    /*loop { //Player's Turn
         println!("Your hand ({})", hand_value(&player_hand));
         describe_hand(&player_hand);
         println!("Dealer's hand ({}) ", hand_value(&dealer_hand));
@@ -118,11 +130,12 @@ pub fn main() {
         println!("You win"); //Player hand is better than Dealer's
     } else {
         println!("You lose!") //Player hand is worse than Dealer's
-    }
+    } */
 
 }
 
-fn init_deck() -> Vec<PlayingCard> {
+pub fn init_deck() -> Vec<PlayingCard> {
+    println!("Initializing deck...");
     let mut deck = Vec::new();
     let mut current_suit = CardSuit::Heart;
     for i in 1..53 {
@@ -140,21 +153,36 @@ fn init_deck() -> Vec<PlayingCard> {
             deck.push(PlayingCard { suit: current_suit, value: i % 13});        
         }
     }
+    println!("Deck initialized! Deck has {} cards!", deck.len());
     return deck;
 }
 
-fn draw_card(deck: &mut Vec<PlayingCard>) -> PlayingCard {
+pub fn draw_card(deck: &mut Vec<PlayingCard>) -> PlayingCard {
+    println!("Drawing a card...");
     let i = (rand::random::<f32>() * deck.len() as f32).floor() as usize;
-    return deck.remove( i );
+    //let i = rand::thread_rng().gen_range(0..deck.len());
+    let card = deck.remove(i);
+    println!("Drew a a {} of {}s", card.value, card.suit);
+    return card;
 }
 
-fn describe_hand(hand: &Vec<PlayingCard>) {
+/*fn describe_hand(hand: &Vec<PlayingCard>) {
     for i in 0..hand.len() {
         println!("There is a {} of {}s", hand[i].value, hand[i].suit);
     }
+} */
+
+// translate PlayingCard struct to the corresponding index in card_sheet.png
+pub fn card_to_asset_index(card: &PlayingCard) -> usize {
+    match card.suit {
+        CardSuit::Heart => return (card.value - 1) as usize,
+        CardSuit::Diamond => return (card.value + 12 ) as usize,
+        CardSuit::Spade => return (card.value + 25) as usize,
+        CardSuit::Club => return (card.value + 38) as usize,
+    }
 }
 
-fn hand_value(hand: &Vec<PlayingCard>) -> u8 {
+/*fn hand_value(hand: &Vec<PlayingCard>) -> u8 {
     let mut hand_value: u8 = 0;
     let mut aces: u8 = 0;
     for i in 0..hand.len() {
@@ -170,4 +198,4 @@ fn hand_value(hand: &Vec<PlayingCard>) -> u8 {
         aces -= 1;
     }
     return hand_value;
-}
+} */
