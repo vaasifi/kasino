@@ -1,15 +1,16 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, render::camera::ScalingMode, window::WindowMode::*};
 mod blackjack;
 use crate::blackjack::PlayingCard;
 use crate::blackjack::draw_card;
 use crate::blackjack::card_to_asset_index;
 use crate::blackjack::init_deck;
 
-// Scaling to support 16:9 resolutions such as 640x360, 1280x720, 1920x1080 and 2560x1440
-// In theory is that this will work with minimal effort if all sprites and cordinates are multipied with the SCALE factor
+// Scaling to support 16:9 resolutions such as 640x360, 1280x720, 1920x1080 and 2560x1440 corresponding to const SCALE values 1.0, 2.0, 3.0, 4.0 respectively
 pub const SCALE: f32 = 2.0;
 pub const WINDOW_WIDTH: f32 = 640.0 * SCALE;
 pub const WINDOW_HEIGHT: f32 = WINDOW_WIDTH / 16.0 * 9.0;
+
+pub const SPRITE_SCALE: f32 = 5.0;
 
 struct Coordinates {
     card_deal_pos_x: f32,
@@ -40,7 +41,8 @@ fn main() {
             height: WINDOW_HEIGHT,
             title: "Kasino".to_string(),
             present_mode: bevy::window::PresentMode::Fifo,
-            resizable: true,
+            resizable: false,
+            mode: Windowed,
             ..Default::default()  
     })
         .add_plugins(DefaultPlugins)
@@ -71,7 +73,10 @@ fn setup(
     commands.insert_resource(SFXPlayCard(play_card_sfx));
 
     // Initialize camera
-    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+    let mut camera = OrthographicCameraBundle::new_2d();
+    camera.orthographic_projection.scaling_mode = ScalingMode::FixedVertical;
+    camera.orthographic_projection.scale = 640.0;
+    commands.spawn_bundle(camera);
 
 	// load card_sheet.png as texture atlas
 	let texture_handle = asset_server.load("card_sheet.png");
@@ -102,14 +107,14 @@ fn card_spawner(
             sprite: TextureAtlasSprite::new(card_to_asset_index(&card)),
             texture_atlas: game_textures.card_sheet.clone(),
             transform: Transform {
-            translation: Vec3::new(cords.card_deal_pos_x * SCALE, - (WINDOW_HEIGHT / 2.0) + (16.0 * SCALE), cords.card_deal_pos_z), // Near the bottom of the screen
-            scale: Vec3::new(SCALE, SCALE, 1.0),
+            translation: Vec3::new(cords.card_deal_pos_x, -570.0, cords.card_deal_pos_z), // Near the bottom of the screen
+            scale: Vec3::new(SPRITE_SCALE, SPRITE_SCALE, 1.0),
             ..Default::default()
             },
             ..Default::default()
         }).insert(Card);
 
-        cords.card_deal_pos_x += 5.0 * SCALE;
+        cords.card_deal_pos_x += 50.0;
         cords.card_deal_pos_z += 1.0;
         card_piles.player_hand.push(card);
 
