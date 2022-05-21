@@ -1,18 +1,9 @@
-use std::{fmt};
+use std::fmt;
 use bevy::prelude::*;
 use rand::prelude::SliceRandom;
 use crate::{GameTextures, SFXPlayCard, SPRITE_SCALE};
 
-pub struct BlackjackPlugin;
-
-impl Plugin for BlackjackPlugin {
-    fn build(&self, app: &mut App) {
-        app
-        .add_startup_system(setup)
-        .add_system(card_spawner)
-        .add_system(card_despawner);
-    }
-}
+pub const CARD_SHIFT: f32 = 50.0;
 
 #[derive(Copy, Clone)]
 pub struct PlayingCard {
@@ -25,11 +16,14 @@ struct Card;
 struct CardPiles {
     deck: Vec<PlayingCard>,
     player_hand: Vec<PlayingCard>,
+    dealer_hand: Vec<PlayingCard>,
 }
 
 struct Coordinates {
-    card_deal_pos_x: f32,
-    card_deal_pos_z: f32,
+    player_deal_pos_x: f32,
+    player_deal_pos_z: f32,
+    dealer_deal_pos_x: f32,
+    dealer_deal_pos_z: f32,
 }
 
 #[derive(Copy, Clone)]
@@ -40,6 +34,16 @@ enum CardSuit {
     Club,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+enum BlackjackState {
+    Betting,
+    InitialDraw,
+    PlayerTurn,
+    PlayerDraw,
+    DealerTurn,
+    DealerDraw,
+    CleanUp,
+}
 
 
 //to_string for CardSuit
@@ -53,33 +57,54 @@ impl fmt::Display for CardSuit {
         }
     }
 }
+pub struct BlackjackPlugin;
+
+impl Plugin for BlackjackPlugin {
+    fn build(&self, app: &mut App) {
+        app
+        .add_startup_system(setup)
+        .add_state(BlackjackState::Betting)
+        .add_system(card_spawner)
+        .add_system(state_changer)
+        .add_system_set(
+            SystemSet::on_enter(BlackjackState::InitialDraw)
+                .with_system(initial_draw))
+        .add_system_set(
+            SystemSet::on_enter(BlackjackState::PlayerDraw)
+                .with_system(draw))
+        .add_system_set(
+            SystemSet::on_enter(BlackjackState::DealerDraw)
+                .with_system(draw))
+        .add_system_set(
+            SystemSet::on_enter(BlackjackState::CleanUp)
+                .with_system(clean_up));
+    }
+}
 
 
 fn setup(
 	mut commands: Commands,
 ) {
     let deck = init_deck();
-    //let mut dealer_hand: Vec<PlayingCard> = Vec::new();
+    let  dealer_hand: Vec<PlayingCard> = Vec::new();
     let player_hand: Vec<PlayingCard> = Vec::new();
 
     let card_piles = CardPiles {
         deck: deck,
         player_hand: player_hand,
+        dealer_hand: dealer_hand,
     };
 
     commands.insert_resource(card_piles);
 
     // Set player hand deal location
     let cords = Coordinates {
-        card_deal_pos_x: 0.0,
-        card_deal_pos_z: 0.0,
+        player_deal_pos_x: 0.0,
+        player_deal_pos_z: 1.0,
+        dealer_deal_pos_x: 50.0,
+        dealer_deal_pos_z: 1.0,
     };
     commands.insert_resource(cords);    
-
-    //Initial card draw
-    //player_hand.push(draw_card(&mut deck));
-    //dealer_hand.push(draw_card(&mut deck));
-    //player_hand.push(draw_card(&mut deck));
 
     /*loop { //Player's Turn
         println!("Your hand ({})", hand_value(&player_hand));
@@ -106,7 +131,7 @@ fn setup(
             .expect("Failed to read line");
 
         if input.trim() == "hit" {
-            player_hand.push(draw_card(&mut deck));
+            player_hand.push(get_card(&mut deck));
 
         } else if input.trim() == "stand" {
             println!("You stand");
@@ -139,7 +164,7 @@ fn setup(
             break;
         } else {
             println!("Dealer draws a card");
-            dealer_hand.push(draw_card(&mut deck));
+            dealer_hand.push(get_card(&mut deck));
         }
         println!("---------------------------------");
     }
@@ -191,7 +216,7 @@ pub fn init_deck() -> Vec<PlayingCard> {
     return deck;
 }
 
-pub fn draw_card(deck: &mut Vec<PlayingCard>) -> PlayingCard {
+fn get_card(deck: &mut Vec<PlayingCard>) -> PlayingCard {
     let i = (rand::random::<f32>() * deck.len() as f32).floor() as usize;
     let card = deck.remove(i);
     return card;
@@ -232,49 +257,128 @@ pub fn card_to_asset_index(card: &PlayingCard) -> usize {
 } */
 
 fn card_spawner(
-    mut commands: Commands,
-    game_textures: Res<GameTextures>,
     keyboard: Res<Input<KeyCode>>,
-    mut cords: ResMut<Coordinates>,
-    mut card_piles: ResMut<CardPiles>,
-    audio: Res<Audio>,
-    sound: Res<SFXPlayCard>,
+    mut blackjack_state: ResMut<State<BlackjackState>>,
 ) {
-    if keyboard.just_pressed(KeyCode::Z) {
-        audio.play(sound.0.clone());
-        let card: PlayingCard = draw_card(&mut card_piles.deck);
-        commands.spawn_bundle(SpriteSheetBundle {
-            sprite: TextureAtlasSprite::new(card_to_asset_index(&card)),
-            texture_atlas: game_textures.card_sheet.clone(),
-            transform: Transform {
-            translation: Vec3::new(cords.card_deal_pos_x, -570.0, cords.card_deal_pos_z), // Near the bottom of the screen
-            scale: Vec3::new(SPRITE_SCALE, SPRITE_SCALE, 1.0),
-            ..Default::default()
-            },
-            ..Default::default()
-        }).insert(Card);
-
-        cords.card_deal_pos_x += 50.0;
-        cords.card_deal_pos_z += 1.0;
-        card_piles.player_hand.push(card);
-
+    if blackjack_state.current() == &BlackjackState::PlayerTurn && keyboard.just_pressed(KeyCode::Z) {
+        blackjack_state.set(BlackjackState::PlayerDraw).unwrap();
+    } else if blackjack_state.current() == &BlackjackState::DealerTurn && keyboard.just_pressed(KeyCode::Z) {
+        blackjack_state.set(BlackjackState::DealerDraw).unwrap();
     }
 }
 
-fn card_despawner(
+fn clean_up(
     mut commands: Commands,
-    keyboard: Res<Input<KeyCode>>,
     mut cords: ResMut<Coordinates>,
     mut cards: Query<(Entity, With<Card>)>,
     mut card_piles: ResMut<CardPiles>,
 ) {
-    if keyboard.just_pressed(KeyCode::X) {
-        for entity in cards.iter_mut() {
-            commands.entity(entity.0).despawn();
-        }
-        cords.card_deal_pos_x = 0.0;
-        cords.card_deal_pos_z = 1.0;
-        card_piles.deck = init_deck();
-        card_piles.player_hand = Vec::new();
+    for entity in cards.iter_mut() {
+        commands.entity(entity.0).despawn();
     }
+    cords.player_deal_pos_x = 0.0;
+    cords.player_deal_pos_z = 1.0;
+    cords.dealer_deal_pos_x = 50.0;
+    cords.dealer_deal_pos_z = 1.0;
+    card_piles.deck = init_deck();
+    card_piles.player_hand = Vec::new();
+}
+
+fn state_changer( // debugging fundtion. Press x to progress through game state
+    keyboard: ResMut<Input<KeyCode>>,
+    mut blackjack_state: ResMut<State<BlackjackState>>,
+) {
+    if keyboard.just_pressed(KeyCode::X) {
+        match blackjack_state.current() {
+            BlackjackState::Betting => blackjack_state.set(BlackjackState::InitialDraw,).unwrap(),
+            BlackjackState::InitialDraw => blackjack_state.set(BlackjackState::PlayerTurn).unwrap(),
+            BlackjackState::PlayerTurn => blackjack_state.set(BlackjackState::DealerTurn).unwrap(),
+            BlackjackState::DealerTurn => blackjack_state.set(BlackjackState::CleanUp).unwrap(),
+            BlackjackState::PlayerDraw => blackjack_state.set(BlackjackState::CleanUp).unwrap(),
+            BlackjackState::DealerDraw => blackjack_state.set(BlackjackState::CleanUp).unwrap(),
+            BlackjackState::CleanUp => blackjack_state.set(BlackjackState::CleanUp).unwrap(),
+        }
+    }
+}
+
+fn draw(
+    mut commands: Commands,
+    mut cords: ResMut<Coordinates>,
+    mut card_piles: ResMut<CardPiles>,
+    audio: Res<Audio>,
+    sound: Res<SFXPlayCard>,
+    game_textures: Res<GameTextures>,
+    mut blackjack_state: ResMut<State<BlackjackState>>,
+) {
+    audio.play(sound.0.clone());
+    let card: PlayingCard = get_card(&mut card_piles.deck);
+    match blackjack_state.current() {
+        BlackjackState::Betting => panic!("Should not call this function in this state!"),
+        BlackjackState::InitialDraw => panic!("Should not call this function in this state!"),
+        BlackjackState::PlayerTurn => panic!("Should not call this function in this state!"),
+        BlackjackState::DealerTurn => panic!("Should not call this function in this state!"),
+        BlackjackState::CleanUp => panic!("Should not call this function in this state!"),
+        BlackjackState::PlayerDraw => {
+
+            commands.spawn_bundle(SpriteSheetBundle {
+                sprite: TextureAtlasSprite::new(card_to_asset_index(&card)),
+                texture_atlas: game_textures.card_sheet.clone(),
+                transform: Transform {
+                translation: Vec3::new(cords.player_deal_pos_x, -570.0, cords.player_deal_pos_z),
+                scale: Vec3::new(SPRITE_SCALE, SPRITE_SCALE, 1.0),
+                ..Default::default()
+                },
+                ..Default::default()
+            }).insert(Card);
+            cords.player_deal_pos_x += CARD_SHIFT;
+            cords.player_deal_pos_z += 1.0;
+            card_piles.player_hand.push(card);
+            if card_piles.player_hand.len() + card_piles.dealer_hand.len() < 5 { blackjack_state.set(BlackjackState::InitialDraw).unwrap(); } else { blackjack_state.set(BlackjackState::PlayerTurn).unwrap(); }
+        },
+        BlackjackState::DealerDraw => {
+            let asset_index: usize = if card_piles.dealer_hand.len() == 1 {
+                52
+            } else {
+                card_to_asset_index(&card)
+            };
+            let card: PlayingCard = if asset_index != 1 {
+                get_card(&mut card_piles.deck)
+            } else {
+                PlayingCard{ suit: CardSuit::Heart, value: 0 } // dummy card
+            };
+
+
+            commands.spawn_bundle(SpriteSheetBundle {
+                sprite: TextureAtlasSprite::new(asset_index),
+                texture_atlas: game_textures.card_sheet.clone(),
+                transform: Transform {
+                translation: Vec3::new(cords.dealer_deal_pos_x, -270.0, cords.dealer_deal_pos_z),
+                scale: Vec3::new(SPRITE_SCALE, SPRITE_SCALE, 1.0),
+                ..Default::default()
+                },
+                ..Default::default()
+            }).insert(Card);
+            cords.dealer_deal_pos_x += CARD_SHIFT;
+            cords.dealer_deal_pos_z += 1.0;
+            card_piles.dealer_hand.push(card);
+            // if dummy card was played, move coordinates so the next real card will be played on top of it
+            if card_piles.dealer_hand.len() == 2 { cords.dealer_deal_pos_x -= CARD_SHIFT;}
+            if card_piles.player_hand.len() + card_piles.dealer_hand.len() < 5 { blackjack_state.set(BlackjackState::InitialDraw).unwrap(); } else { blackjack_state.set(BlackjackState::DealerTurn).unwrap(); }
+        },
+    }
+}
+
+fn initial_draw(
+    card_piles: ResMut<CardPiles>,
+    mut blackjack_state: ResMut<State<BlackjackState>>,
+) {
+    if card_piles.player_hand.len() == 2 {
+        if card_piles.dealer_hand.len() == 2 {
+                blackjack_state.set(BlackjackState::PlayerTurn).unwrap();
+            } else {
+                blackjack_state.set(BlackjackState::DealerDraw).unwrap();
+            }
+        } else {
+            blackjack_state.set(BlackjackState::PlayerDraw).unwrap();
+        }
 }
