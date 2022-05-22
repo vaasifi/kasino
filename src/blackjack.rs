@@ -13,6 +13,13 @@ pub struct PlayingCard {
 
 #[derive(Component)]
 struct Card;
+
+#[derive(Component)]
+struct PlayerValueText;
+
+#[derive(Component)]
+struct DealerValueText;
+
 struct CardPiles {
     deck: Vec<PlayingCard>,
     player_hand: Vec<PlayingCard>,
@@ -66,6 +73,7 @@ impl Plugin for BlackjackPlugin {
         .add_startup_system(setup)
         .add_state(BlackjackState::Betting)
         .add_system(state_changer)
+        .add_system(update_value_text_system)
         .add_system_set(
             SystemSet::on_enter(BlackjackState::InitialDraw)
                 .with_system(initial_draw))
@@ -92,6 +100,7 @@ impl Plugin for BlackjackPlugin {
 
 fn setup(
 	mut commands: Commands,
+    asset_server: Res<AssetServer>,
 ) {
     let deck = init_deck();
     let  dealer_hand: Vec<PlayingCard> = Vec::new();
@@ -114,6 +123,41 @@ fn setup(
     };
     commands.insert_resource(cords);
 
+    let text_style = TextStyle {
+            font: asset_server.load("retro_gaming.ttf"),
+            font_size: 50.0,
+            color: Color::WHITE,
+        };
+
+    commands
+        .spawn_bundle(Text2dBundle {
+            transform: Transform {
+                translation: Vec3::new(-150.0, -500.0, 100.0),
+                ..default()
+            },
+            text: Text::with_section(
+                "21",
+                text_style.clone(),
+                Default::default(),
+            ),
+            ..default()
+        })
+        .insert(PlayerValueText);
+    
+        commands
+    .spawn_bundle(Text2dBundle {
+        transform: Transform {
+            translation: Vec3::new(-100.0, -200.0, 100.0),
+            ..default()
+        },
+        text: Text::with_section(
+            "21",
+            text_style.clone(),
+            Default::default(),
+        ),
+        ..default()
+    })
+    .insert(DealerValueText);
 }
 
 fn player_turn(
@@ -121,7 +165,6 @@ fn player_turn(
     mut keyboard: ResMut<Input<KeyCode>>,
     mut blackjack_state: ResMut<State<BlackjackState>>,
 ) {
-    println!("Player turn ({})", hand_value(&card_piles.player_hand));
     if card_piles.player_hand.len() == 2 && hand_value(&card_piles.player_hand) == 21 {
         println!("Player blackjack!");
         blackjack_state.set(BlackjackState::DealerTurn).unwrap();
@@ -143,7 +186,6 @@ fn dealer_turn(
     card_piles: ResMut<CardPiles>,
     mut blackjack_state: ResMut<State<BlackjackState>>,
 ) {
-    println!("Dealer turn ({})", hand_value(&card_piles.dealer_hand));
     if card_piles.dealer_hand.len() == 3 && hand_value(&card_piles.dealer_hand) == 21 { 
         println!("Dealer blackjack!");
         blackjack_state.set(BlackjackState::GameEnd).unwrap();
@@ -268,7 +310,36 @@ fn clean_up(
     card_piles.dealer_hand = Vec::new();
 }
 
-pub fn init_deck() -> Vec<PlayingCard> {
+fn update_value_text_system(
+    mut player_query: Query<&mut Text, (With<PlayerValueText>, Without<DealerValueText>)>,
+    mut dealer_query: Query<&mut Text, (With<DealerValueText>, Without<PlayerValueText>)>,
+    card_piles: ResMut<CardPiles>,
+) {
+    for mut text in player_query.iter_mut() {
+        update_value_text(&mut text, &card_piles.player_hand);
+    }
+
+    for mut text in dealer_query.iter_mut() {
+        update_value_text(&mut text, &card_piles.dealer_hand);
+    }
+}
+
+fn update_value_text(text: &mut Text, hand: &Vec<PlayingCard>) {
+    if hand.len() == 0 {
+        text.sections[0].value = format!("");
+        text.sections[0].style.color = Color::WHITE;
+    } else {
+        text.sections[0].value = format!("{}", hand_value(&hand));
+    }
+    if hand_value(&hand) > 21 {
+        text.sections[0].style.color = Color::RED;
+    }
+}
+
+
+
+
+fn init_deck() -> Vec<PlayingCard> {
     let mut deck = Vec::new();
     let mut current_suit = CardSuit::Heart;
     for i in 1..53 {
@@ -296,12 +367,6 @@ fn get_card(deck: &mut Vec<PlayingCard>) -> PlayingCard {
     let i = (rand::random::<f32>() * deck.len() as f32).floor() as usize;
     let card = deck.remove(i);
     return card;
-}
-
-fn _describe_hand(hand: &Vec<PlayingCard>) {
-    for i in 0..hand.len() {
-        println!("There is a {} of {}s", hand[i].value, hand[i].suit);
-    }
 }
 
 // translate PlayingCard struct to the corresponding index in card_sheet.png
