@@ -1,9 +1,58 @@
 use std::{fmt, cmp};
 use bevy::prelude::*;
 use rand::prelude::SliceRandom;
-use crate::{GameTextures, SFXPlayCard, SPRITE_SCALE};
+use crate::{GameTextures, SFXPlayCard, Player, SPRITE_SCALE};
+
+impl Plugin for BlackjackPlugin {
+    fn build(&self, app: &mut App) {
+        app
+        .add_startup_system(setup_system)
+        .add_state(BlackjackState::PreGame)
+        .add_system(blackjack_control_system)
+        .add_system(update_value_text_system)
+        .add_system_set(
+            SystemSet::on_enter(BlackjackState::PreGame)
+            .with_system(pre_game_system)
+            .with_system(update_control_guide_system))
+        .add_system_set(
+            SystemSet::on_enter(BlackjackState::ChangeBet)
+            .with_system(update_control_guide_system))
+        .add_system_set(
+            SystemSet::on_enter(BlackjackState::InitialDraw)
+                .with_system(initial_draw_system)
+                .with_system(update_control_guide_system))
+        .add_system_set(
+            SystemSet::on_enter(BlackjackState::PlayerDraw)
+                .with_system(draw_system)
+                .with_system(update_control_guide_system))
+        .add_system_set(
+            SystemSet::on_enter(BlackjackState::DealerDraw)
+                .with_system(draw_system)
+                .with_system(update_control_guide_system))
+        .add_system_set(
+            SystemSet::on_enter(BlackjackState::PlayerTurn)
+                .with_system(player_turn_system)
+                .with_system(update_control_guide_system))
+        .add_system_set(
+            SystemSet::on_enter(BlackjackState::DealerTurn)
+                .with_system(dealer_turn_system)
+                .with_system(update_control_guide_system))
+        .add_system_set(
+            SystemSet::on_enter(BlackjackState::GameEnd)
+                .with_system(game_end_system)
+                .with_system(update_control_guide_system))
+        .add_system_set(
+            SystemSet::on_enter(BlackjackState::CleanUp)
+                .with_system(clean_up_system)
+                .with_system(update_control_guide_system));
+    }
+}
 
 pub const CARD_SHIFT: f32 = 50.0;
+
+pub const BET_STEP: f32 = 1.0;
+pub const MIN_BET: f32 = 1.0;
+pub const MAX_BET: f32 = 10.0;
 
 #[derive(Copy, Clone)]
 pub struct PlayingCard {
@@ -15,10 +64,16 @@ pub struct PlayingCard {
 struct Card;
 
 #[derive(Component)]
-struct PlayerValueText;
+struct UiPlayerHandValue;
 
 #[derive(Component)]
-struct DealerValueText;
+struct UiDealerHandValue;
+
+#[derive(Component)]
+struct Prop;
+
+#[derive(Component)]
+pub struct UiBlackjackControlsGuide;
 
 struct CardPiles {
     deck: Vec<PlayingCard>,
@@ -43,7 +98,8 @@ enum CardSuit {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 enum BlackjackState {
-    Betting,
+    PreGame,
+    ChangeBet,
     InitialDraw,
     PlayerTurn,
     PlayerDraw,
@@ -67,40 +123,11 @@ impl fmt::Display for CardSuit {
 }
 pub struct BlackjackPlugin;
 
-impl Plugin for BlackjackPlugin {
-    fn build(&self, app: &mut App) {
-        app
-        .add_startup_system(setup)
-        .add_state(BlackjackState::Betting)
-        .add_system(state_changer)
-        .add_system(update_value_text_system)
-        .add_system_set(
-            SystemSet::on_enter(BlackjackState::InitialDraw)
-                .with_system(initial_draw))
-        .add_system_set(
-            SystemSet::on_enter(BlackjackState::PlayerDraw)
-                .with_system(draw))
-        .add_system_set(
-            SystemSet::on_enter(BlackjackState::DealerDraw)
-                .with_system(draw))
-        .add_system_set(
-            SystemSet::on_update(BlackjackState::PlayerTurn)
-                .with_system(player_turn))
-        .add_system_set(
-            SystemSet::on_enter(BlackjackState::DealerTurn)
-                .with_system(dealer_turn))
-        .add_system_set(
-            SystemSet::on_enter(BlackjackState::GameEnd)
-                .with_system(game_end))
-        .add_system_set(
-            SystemSet::on_enter(BlackjackState::CleanUp)
-                .with_system(clean_up));
-    }
-}
 
-fn setup(
+fn setup_system(
 	mut commands: Commands,
     asset_server: Res<AssetServer>,
+    game_textures: Res<GameTextures>,
 ) {
     let deck = init_deck();
     let  dealer_hand: Vec<PlayingCard> = Vec::new();
@@ -129,6 +156,20 @@ fn setup(
             color: Color::WHITE,
         };
 
+    // Spawn deck prop
+    commands.spawn_bundle(SpriteSheetBundle {
+        sprite: TextureAtlasSprite::new(53),
+        texture_atlas: game_textures.card_sheet.clone(),
+        transform: Transform {
+        translation: Vec3::new(250.0, 250.0, 1.0),
+        scale: Vec3::new(SPRITE_SCALE, SPRITE_SCALE, 1.0),
+        ..Default::default()
+        },
+        ..Default::default()
+    }).insert(Prop);
+
+
+    // Spawn hand value indicator textbundles
     commands
         .spawn_bundle(Text2dBundle {
             transform: Transform {
@@ -142,7 +183,7 @@ fn setup(
             ),
             ..default()
         })
-        .insert(PlayerValueText);
+        .insert(UiPlayerHandValue);
     
         commands
     .spawn_bundle(Text2dBundle {
@@ -157,12 +198,60 @@ fn setup(
         ),
         ..default()
     })
-    .insert(DealerValueText);
+    .insert(UiDealerHandValue);
+    
+    // Controls Guide
+    commands
+    .spawn_bundle(Text2dBundle {
+        transform: Transform {
+            translation: Vec3::new(-1130.0, -490.0, 100.0),
+            ..default()
+        },
+        text: Text::with_section(
+            "Z: Hit, X Stands, C Next",
+            TextStyle {
+                font: asset_server.load("retro_gaming.ttf"),
+                font_size: 50.0,
+                color: Color::WHITE,
+            },
+            Default::default(),
+        ),
+        ..default()
+    }).insert(UiBlackjackControlsGuide);  
+
 }
 
-fn player_turn(
-    card_piles: ResMut<CardPiles>,
+fn pre_game_system(
     mut keyboard: ResMut<Input<KeyCode>>,
+    mut blackjack_state: ResMut<State<BlackjackState>>,
+) {
+    if keyboard.just_pressed(KeyCode::Z) { // Start the game, add conditions about having enough money for bet
+        keyboard.clear_just_pressed(KeyCode::Z);
+        blackjack_state.set(BlackjackState::InitialDraw).unwrap();
+    } else if keyboard.just_pressed(KeyCode::C) { // Change Bet
+        keyboard.clear_just_pressed(KeyCode::C);
+        blackjack_state.set(BlackjackState::ChangeBet).unwrap();
+    }
+}
+
+fn initial_draw_system(
+
+    card_piles: ResMut<CardPiles>,
+    mut blackjack_state: ResMut<State<BlackjackState>>,
+) {
+    if card_piles.player_hand.len() == 2 {
+        if card_piles.dealer_hand.len() == 2 {
+                blackjack_state.set(BlackjackState::PlayerTurn).unwrap();
+            } else {
+                blackjack_state.set(BlackjackState::DealerDraw).unwrap();
+            }
+        } else {
+            blackjack_state.set(BlackjackState::PlayerDraw).unwrap();
+        }
+}
+
+fn player_turn_system(
+    card_piles: ResMut<CardPiles>,
     mut blackjack_state: ResMut<State<BlackjackState>>,
 ) {
     if card_piles.player_hand.len() == 2 && hand_value(&card_piles.player_hand) == 21 {
@@ -171,18 +260,10 @@ fn player_turn(
     } else if hand_value(&card_piles.player_hand) > 21 { 
         println!("Player bust!");
         blackjack_state.set(BlackjackState::GameEnd).unwrap();
-    } else if keyboard.just_pressed(KeyCode::Z) { // Hit
-        keyboard.clear_just_pressed(KeyCode::Z);
-        println!("Player hit");
-        blackjack_state.set(BlackjackState::PlayerDraw).unwrap();
-    } else if keyboard.just_pressed(KeyCode::X) { // Stand
-        keyboard.clear_just_pressed(KeyCode::Z);
-        println!("Player stands");
-        blackjack_state.set(BlackjackState::DealerTurn).unwrap();   
     }
 }
 
-fn dealer_turn(
+fn dealer_turn_system(
     card_piles: ResMut<CardPiles>,
     mut blackjack_state: ResMut<State<BlackjackState>>,
 ) {
@@ -201,7 +282,7 @@ fn dealer_turn(
     }
 }
 
-fn draw(
+fn draw_system(
     mut commands: Commands,
     mut cords: ResMut<Coordinates>,
     mut card_piles: ResMut<CardPiles>,
@@ -213,7 +294,8 @@ fn draw(
     audio.play(sound.0.clone());
     let card: PlayingCard = get_card(&mut card_piles.deck);
     match blackjack_state.current() {
-        BlackjackState::Betting => panic!("Should not call this function in this state!"),
+        BlackjackState::PreGame => panic!("Should not call this function in this state!"),
+        BlackjackState::ChangeBet => panic!("Should not call this function in this state!"),
         BlackjackState::InitialDraw => panic!("Should not call this function in this state!"),
         BlackjackState::PlayerTurn => panic!("Should not call this function in this state!"),
         BlackjackState::DealerTurn => panic!("Should not call this function in this state!"),
@@ -264,35 +346,42 @@ fn draw(
             // if dummy card was played, move coordinates so the next real card will be played on top of it
             if card_piles.dealer_hand.len() == 2 { cords.dealer_deal_pos_x -= CARD_SHIFT;}
             if card_piles.player_hand.len() + card_piles.dealer_hand.len() < 5 { blackjack_state.set(BlackjackState::InitialDraw).unwrap(); } else { blackjack_state.set(BlackjackState::DealerTurn).unwrap(); }
+
         },
     }
 }
 
-fn game_end(
+fn game_end_system(
     card_piles: ResMut<CardPiles>,
+    mut player: ResMut<Player>,
 ) {
     if hand_value(&card_piles.player_hand) > 21 {
         println!("You lose!"); //Player bust
     } else if hand_value(&card_piles.dealer_hand) > 21 {
         println!("You win!"); //Dealer bust
+        player.money += player.bet * 2.0;
     } else if hand_value(&card_piles.player_hand) == 21 && card_piles.player_hand.len() == 2 {
         if hand_value(&card_piles.dealer_hand) == 21 && card_piles.dealer_hand.len() == 3 {
             println!("Draw!"); //Dealer & Player blacjack
+            player.money += player.bet;
         } else {
             println!("You win!"); //Player blacjack, x1.5 payout
+            player.money += player.bet * 3.0;
         }
     } else if hand_value(&card_piles.dealer_hand) == 21 && card_piles.dealer_hand.len() == 3 {
         println!("You lose!"); //Dealer blackjack
     } else if hand_value(&card_piles.player_hand) == hand_value(&card_piles.dealer_hand) {
         println!("Draw!"); //Dealer and Player have same hand value
+        player.money += player.bet;
     } else if hand_value(&card_piles.player_hand) > hand_value(&card_piles.dealer_hand) {
         println!("You win"); //Player hand is better than Dealer's
+        player.money += player.bet * 2.0;
     } else {
         println!("You lose!") //Player hand is worse than Dealer's
     }
 }
 
-fn clean_up(
+fn clean_up_system(
     mut commands: Commands,
     mut cords: ResMut<Coordinates>,
     mut cards: Query<(Entity, With<Card>)>,
@@ -311,23 +400,25 @@ fn clean_up(
 }
 
 fn update_value_text_system(
-    mut player_query: Query<&mut Text, (With<PlayerValueText>, Without<DealerValueText>)>,
-    mut dealer_query: Query<&mut Text, (With<DealerValueText>, Without<PlayerValueText>)>,
+    mut player_query: Query<&mut Text, (With<UiPlayerHandValue>, Without<UiDealerHandValue>)>,
+    mut dealer_query: Query<&mut Text, (With<UiDealerHandValue>, Without<UiPlayerHandValue>)>,
     card_piles: ResMut<CardPiles>,
 ) {
     for mut text in player_query.iter_mut() {
-        update_value_text(&mut text, &card_piles.player_hand);
+        update_value_text(&mut text, &card_piles.player_hand, false);
     }
 
     for mut text in dealer_query.iter_mut() {
-        update_value_text(&mut text, &card_piles.dealer_hand);
+        update_value_text(&mut text, &card_piles.dealer_hand, true);
     }
 }
 
-fn update_value_text(text: &mut Text, hand: &Vec<PlayingCard>) {
+fn update_value_text(text: &mut Text, hand: &Vec<PlayingCard>, is_dealer: bool) {
     if hand.len() == 0 {
         text.sections[0].value = format!("");
         text.sections[0].style.color = Color::WHITE;
+    } else if hand_value(&hand) == 21 && ((hand.len() == 2 && !is_dealer) || (hand.len() == 3 && is_dealer)) {
+        text.sections[0].value = format!("BJ!");
     } else {
         text.sections[0].value = format!("{}", hand_value(&hand));
     }
@@ -336,6 +427,25 @@ fn update_value_text(text: &mut Text, hand: &Vec<PlayingCard>) {
     }
 }
 
+
+fn update_control_guide_system(
+    blackjack_state: ResMut<State<BlackjackState>>,
+    mut query: Query<&mut Text, With<UiBlackjackControlsGuide>>,
+) {
+    for mut text in query.iter_mut() {
+        match blackjack_state.current() {
+            BlackjackState::PreGame => text.sections[0].value = format!(" \nZ: Start\nC: Change Bet"),
+            BlackjackState::ChangeBet => text.sections[0].value = format!("Z: Raise Bet\nX: Lower Bet\nC: Confirm Bet"),
+            BlackjackState::InitialDraw => text.sections[0].value = format!(""),
+            BlackjackState::PlayerTurn => text.sections[0].value = format!(" \nZ: Hit\nX: Stand"),
+            BlackjackState::DealerTurn => text.sections[0].value = format!(""),
+            BlackjackState::PlayerDraw => text.sections[0].value = format!(""),
+            BlackjackState::DealerDraw => text.sections[0].value = format!(""),
+            BlackjackState::GameEnd => text.sections[0].value = format!(" \n \nZ: Cleanup"),
+            BlackjackState::CleanUp => text.sections[0].value = format!(" \n \nZ: Next"),
+        }
+    }
+} 
 
 
 
@@ -397,35 +507,61 @@ fn hand_value(hand: &Vec<PlayingCard>) -> u8 {
     return hand_value;
 }
 
-fn initial_draw(
-    card_piles: ResMut<CardPiles>,
+fn blackjack_control_system(
+    mut keyboard: ResMut<Input<KeyCode>>,
     mut blackjack_state: ResMut<State<BlackjackState>>,
+    mut player: ResMut<Player>,
 ) {
-    if card_piles.player_hand.len() == 2 {
-        if card_piles.dealer_hand.len() == 2 {
-                blackjack_state.set(BlackjackState::PlayerTurn).unwrap();
-            } else {
-                blackjack_state.set(BlackjackState::DealerDraw).unwrap();
-            }
-        } else {
-            blackjack_state.set(BlackjackState::PlayerDraw).unwrap();
-        }
-}
-
-fn state_changer( // debugging function. Press c to progress through game states
-    keyboard: ResMut<Input<KeyCode>>,
-    mut blackjack_state: ResMut<State<BlackjackState>>,
-) {
-    if keyboard.just_pressed(KeyCode::C) {
+    if keyboard.just_pressed(KeyCode::Z) {
+        keyboard.clear_just_pressed(KeyCode::Z);
         match blackjack_state.current() {
-            BlackjackState::Betting => blackjack_state.set(BlackjackState::InitialDraw,).unwrap(),
-            BlackjackState::InitialDraw => blackjack_state.set(BlackjackState::PlayerTurn).unwrap(),
-            BlackjackState::PlayerTurn => blackjack_state.set(BlackjackState::DealerTurn).unwrap(),
-            BlackjackState::DealerTurn => blackjack_state.set(BlackjackState::GameEnd).unwrap(),
-            BlackjackState::PlayerDraw => blackjack_state.set(BlackjackState::GameEnd).unwrap(),
-            BlackjackState::DealerDraw => blackjack_state.set(BlackjackState::GameEnd).unwrap(),
-            BlackjackState::GameEnd => blackjack_state.set(BlackjackState::CleanUp).unwrap(),
-            BlackjackState::CleanUp => blackjack_state.set(BlackjackState::InitialDraw).unwrap(),
+            BlackjackState::PreGame => {
+                if player.money - player.bet < 0.0 {
+                    println!("Not enough money for this bet!")
+                } else {
+                    player.money -= player.bet;
+                    blackjack_state.set(BlackjackState::InitialDraw,).unwrap()
+                }
+            },
+            BlackjackState::ChangeBet => if player.bet + BET_STEP <= MAX_BET && player.bet + BET_STEP <= player.money {player.bet += BET_STEP;},
+            BlackjackState::InitialDraw => {},
+            BlackjackState::PlayerTurn => {
+                println!("Player hit");
+                blackjack_state.set(BlackjackState::PlayerDraw).unwrap();
+            },
+            BlackjackState::DealerTurn => {},
+            BlackjackState::PlayerDraw => {},
+            BlackjackState::DealerDraw => {},
+            BlackjackState::GameEnd => blackjack_state.set(BlackjackState::CleanUp,).unwrap(),
+            BlackjackState::CleanUp => blackjack_state.set(BlackjackState::PreGame,).unwrap(),
         }
-    }
+    } else if keyboard.just_pressed(KeyCode::X) {
+        keyboard.clear_just_pressed(KeyCode::X);
+        match blackjack_state.current() {
+            BlackjackState::PreGame => {},
+            BlackjackState::ChangeBet => if player.bet - BET_STEP >= MIN_BET {player.bet -= BET_STEP;},
+            BlackjackState::InitialDraw => {},
+            BlackjackState::PlayerTurn => {
+                println!("Player stands");
+                blackjack_state.set(BlackjackState::DealerTurn).unwrap();},
+            BlackjackState::DealerTurn => {},
+            BlackjackState::PlayerDraw => {},
+            BlackjackState::DealerDraw => {},
+            BlackjackState::GameEnd => {},
+            BlackjackState::CleanUp => {},
+        }
+    } else if keyboard.just_pressed(KeyCode::C) {
+        keyboard.clear_just_pressed(KeyCode::C);
+        match blackjack_state.current() {
+            BlackjackState::PreGame => blackjack_state.set(BlackjackState::ChangeBet,).unwrap(),
+            BlackjackState::ChangeBet => blackjack_state.set(BlackjackState::PreGame).unwrap(),
+            BlackjackState::InitialDraw => {},
+            BlackjackState::PlayerTurn => {},
+            BlackjackState::DealerTurn => {},
+            BlackjackState::PlayerDraw => {},
+            BlackjackState::DealerDraw => {},
+            BlackjackState::GameEnd => {},
+            BlackjackState::CleanUp => {},
+        }
+    } 
 }
