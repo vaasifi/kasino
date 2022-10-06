@@ -6,7 +6,7 @@ use blackjack::BlackjackPlugin;
 mod debug;
 use debug::DebugPlugin;
 
-// Scaling to support 16:9 resolutions such as 640x360, 1280x720, 1920x1080 and 2560x1440 corresponding to const SCALE values 1.0, 2.0, 3.0, 4.0 respectively
+// Scaling to support 16:9 resolutions such as 640x360, 1280x720, 1920x1080 and 2560x1440 corresponding to const SCALE values 1.0, 2.0, 3.0, 4.0 respectively - Needs rework after bevy 0.8
 pub const SCALE: f32 = 2.0;
 pub const WINDOW_WIDTH: f32 = 640.0 * SCALE;
 pub const WINDOW_HEIGHT: f32 = WINDOW_WIDTH / 16.0 * 9.0;
@@ -59,9 +59,17 @@ fn setup_system(
     commands.insert_resource(SFXPlayCard(play_card_sfx));
 
     // Initialize camera
-    let mut camera = OrthographicCameraBundle::new_2d();
-    camera.orthographic_projection.scaling_mode = ScalingMode::FixedVertical;
-    camera.orthographic_projection.scale = 640.0;
+    let mut camera = Camera2dBundle {
+        projection: OrthographicProjection {
+            scaling_mode: ScalingMode::FixedVertical(WINDOW_WIDTH),
+            //scaling_mode: ScalingMode::WindowSize
+            //scale: 640.0,
+            ..default()
+        },
+        ..default()
+    };
+    //camera.orthographic_projection.scaling_mode = ScalingMode::FixedVertical;
+    //camera.orthographic_projection.scale = 640.0;
     commands.spawn_bundle(camera);
 
 	// load card_sheet.png as texture atlas
@@ -88,15 +96,11 @@ fn setup_system(
             translation: Vec3::new(-1100.0, 600.0, 100.0),
             ..default()
         },
-        text: Text::with_section(
-            "Money: ???",
-            TextStyle {
+        text: Text::from_section("Money: ???", TextStyle {
                 font: asset_server.load("retro_gaming.ttf"),
                 font_size: 50.0,
                 color: Color::WHITE,
-            },
-            Default::default(),
-        ),
+            }),
         ..default()
     }).insert(UiPlayerMoney);   
 

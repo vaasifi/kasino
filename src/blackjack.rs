@@ -11,38 +11,40 @@ impl Plugin for BlackjackPlugin {
         .add_system(blackjack_control_system)
         .add_system(update_value_text_system)
         .add_system_set(
-            SystemSet::on_enter(BlackjackState::PreGame)
+            SystemSet::on_update(BlackjackState::PreGame)
             .with_system(pre_game_system)
             .with_system(update_control_guide_system))
         .add_system_set(
-            SystemSet::on_enter(BlackjackState::ChangeBet)
+            SystemSet::on_update(BlackjackState::ChangeBet)
             .with_system(update_control_guide_system))
         .add_system_set(
-            SystemSet::on_enter(BlackjackState::InitialDraw)
+            SystemSet::on_update(BlackjackState::InitialDraw)
                 .with_system(initial_draw_system)
                 .with_system(update_control_guide_system))
         .add_system_set(
-            SystemSet::on_enter(BlackjackState::PlayerDraw)
+            SystemSet::on_update(BlackjackState::PlayerDraw)
                 .with_system(draw_system)
                 .with_system(update_control_guide_system))
         .add_system_set(
-            SystemSet::on_enter(BlackjackState::DealerDraw)
+            SystemSet::on_update(BlackjackState::DealerDraw)
                 .with_system(draw_system)
                 .with_system(update_control_guide_system))
         .add_system_set(
-            SystemSet::on_enter(BlackjackState::PlayerTurn)
+            SystemSet::on_update(BlackjackState::PlayerTurn)
                 .with_system(player_turn_system)
                 .with_system(update_control_guide_system))
         .add_system_set(
-            SystemSet::on_enter(BlackjackState::DealerTurn)
+            SystemSet::on_update(BlackjackState::DealerTurn)
                 .with_system(dealer_turn_system)
                 .with_system(update_control_guide_system))
         .add_system_set(
-            SystemSet::on_enter(BlackjackState::GameEnd)
-                .with_system(game_end_system)
+            SystemSet::on_update(BlackjackState::GameEnd)
                 .with_system(update_control_guide_system))
         .add_system_set(
-            SystemSet::on_enter(BlackjackState::CleanUp)
+            SystemSet::on_enter(BlackjackState::GameEnd)
+                .with_system(game_end_system))
+        .add_system_set(
+            SystemSet::on_update(BlackjackState::CleanUp)
                 .with_system(clean_up_system)
                 .with_system(update_control_guide_system));
     }
@@ -176,11 +178,7 @@ fn setup_system(
                 translation: Vec3::new(-150.0, -500.0, 100.0),
                 ..default()
             },
-            text: Text::with_section(
-                "21",
-                text_style.clone(),
-                Default::default(),
-            ),
+            text: Text::from_section("21", text_style.clone()),
             ..default()
         })
         .insert(UiPlayerHandValue);
@@ -191,11 +189,7 @@ fn setup_system(
             translation: Vec3::new(-100.0, -200.0, 100.0),
             ..default()
         },
-        text: Text::with_section(
-            "21",
-            text_style.clone(),
-            Default::default(),
-        ),
+        text: Text::from_section("21", text_style.clone()),
         ..default()
     })
     .insert(UiDealerHandValue);
@@ -207,15 +201,11 @@ fn setup_system(
             translation: Vec3::new(-1130.0, -490.0, 100.0),
             ..default()
         },
-        text: Text::with_section(
-            "Z: Hit, X Stands, C Next",
-            TextStyle {
+        text: Text::from_section("Z: Hit, X Stands, C Next", TextStyle {
                 font: asset_server.load("retro_gaming.ttf"),
                 font_size: 50.0,
                 color: Color::WHITE,
-            },
-            Default::default(),
-        ),
+            }),
         ..default()
     }).insert(UiBlackjackControlsGuide);  
 
