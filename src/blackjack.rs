@@ -77,12 +77,14 @@ struct Prop;
 #[derive(Component)]
 pub struct UiBlackjackControlsGuide;
 
+#[derive(Resource)]
 struct CardPiles {
     deck: Vec<PlayingCard>,
     player_hand: Vec<PlayingCard>,
     dealer_hand: Vec<PlayingCard>,
 }
 
+#[derive(Resource)]
 struct Coordinates {
     player_deal_pos_x: f32,
     player_deal_pos_z: f32,
@@ -159,7 +161,7 @@ fn setup_system(
         };
 
     // Spawn deck prop
-    commands.spawn_bundle(SpriteSheetBundle {
+    commands.spawn(SpriteSheetBundle {
         sprite: TextureAtlasSprite::new(53),
         texture_atlas: game_textures.card_sheet.clone(),
         transform: Transform {
@@ -173,7 +175,7 @@ fn setup_system(
 
     // Spawn hand value indicator textbundles
     commands
-        .spawn_bundle(Text2dBundle {
+        .spawn(Text2dBundle {
             transform: Transform {
                 translation: Vec3::new(-150.0, -500.0, 100.0),
                 ..default()
@@ -184,7 +186,7 @@ fn setup_system(
         .insert(UiPlayerHandValue);
     
         commands
-    .spawn_bundle(Text2dBundle {
+    .spawn(Text2dBundle {
         transform: Transform {
             translation: Vec3::new(-100.0, -200.0, 100.0),
             ..default()
@@ -196,7 +198,7 @@ fn setup_system(
     
     // Controls Guide
     commands
-    .spawn_bundle(Text2dBundle {
+    .spawn(Text2dBundle {
         transform: Transform {
             translation: Vec3::new(-1130.0, -490.0, 100.0),
             ..default()
@@ -292,7 +294,7 @@ fn draw_system(
         BlackjackState::CleanUp => panic!("Should not call this function in this state!"),
         BlackjackState::GameEnd => panic!("Should not call this function in this state!"),
         BlackjackState::PlayerDraw => {
-            commands.spawn_bundle(SpriteSheetBundle {
+            commands.spawn(SpriteSheetBundle {
                 sprite: TextureAtlasSprite::new(card_to_asset_index(&card)),
                 texture_atlas: game_textures.card_sheet.clone(),
                 transform: Transform {
@@ -320,7 +322,7 @@ fn draw_system(
                 card_to_asset_index(&card)
             };
 
-            commands.spawn_bundle(SpriteSheetBundle {
+            commands.spawn(SpriteSheetBundle {
                 sprite: TextureAtlasSprite::new(asset_index),
                 texture_atlas: game_textures.card_sheet.clone(),
                 transform: Transform {
@@ -509,7 +511,7 @@ fn blackjack_control_system(
                 if player.money - player.bet < 0.0 {
                     println!("Not enough money for this bet!")
                 } else {
-                    player.money -= player.bet;
+                    player.money = player.money - player.bet;
                     blackjack_state.set(BlackjackState::InitialDraw,).unwrap()
                 }
             },

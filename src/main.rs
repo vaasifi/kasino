@@ -15,16 +15,21 @@ pub const SPRITE_SCALE: f32 = 5.0;
 
 fn main() {
     App::new()
-            .insert_resource(WindowDescriptor {
-            width: WINDOW_WIDTH,
-            height: WINDOW_HEIGHT,
-            title: "Kasino".to_string(),
-            present_mode: bevy::window::PresentMode::Fifo,
-            resizable: false,
-            mode: Windowed,
-            ..Default::default()  
-    })
-        .add_plugins(DefaultPlugins)
+            .add_plugins(DefaultPlugins
+                .set(ImagePlugin::default_nearest())
+                .set(WindowPlugin {
+                    window: WindowDescriptor {
+                        width: WINDOW_WIDTH,
+                        height: WINDOW_HEIGHT,
+                        title: "Kasino".to_string(),
+                        present_mode: bevy::window::PresentMode::Fifo,
+                        resizable: false,
+                        mode: Windowed,
+                        ..default()
+                },
+                ..default()
+            }))
+        //.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_startup_system_to_stage(StartupStage::PreStartup,setup_system)
         .add_plugin(BlackjackPlugin)
         .add_plugin(DebugPlugin) // debug
@@ -33,16 +38,18 @@ fn main() {
     
 }
 
-
+#[derive(Resource)]
 struct GameTextures {
     card_sheet: Handle<TextureAtlas>,
 }
 
+#[derive(Resource)]
 struct SFXPlayCard(Handle<AudioSource>);
 
 #[derive(Component)]
 pub struct UiPlayerMoney;
 
+#[derive(Resource)]
 pub struct Player {
     money: f32,
     bet: f32,
@@ -59,7 +66,7 @@ fn setup_system(
     commands.insert_resource(SFXPlayCard(play_card_sfx));
 
     // Initialize camera
-    let mut camera = Camera2dBundle {
+    let camera = Camera2dBundle {
         projection: OrthographicProjection {
             scaling_mode: ScalingMode::FixedVertical(WINDOW_WIDTH),
             //scaling_mode: ScalingMode::WindowSize
@@ -70,11 +77,11 @@ fn setup_system(
     };
     //camera.orthographic_projection.scaling_mode = ScalingMode::FixedVertical;
     //camera.orthographic_projection.scale = 640.0;
-    commands.spawn_bundle(camera);
+    commands.spawn(camera);
 
 	// load card_sheet.png as texture atlas
 	let texture_handle = asset_server.load("card_sheet.png");
-	let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(32., 32.), 13, 5);
+	let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(32., 32.), 13, 5, None, None);
 	let card_sheet = texture_atlases.add(texture_atlas);
 
 	// add sprites and atlases to GameTextures resource
@@ -85,13 +92,13 @@ fn setup_system(
 
     // setup Player values
     let player = Player {
-        money: 100.0,
+        money: 5.0,
         bet: 1.0,
     };
     commands.insert_resource(player); 
 
     commands
-    .spawn_bundle(Text2dBundle {
+    .spawn(Text2dBundle {
         transform: Transform {
             translation: Vec3::new(-1100.0, 600.0, 100.0),
             ..default()
